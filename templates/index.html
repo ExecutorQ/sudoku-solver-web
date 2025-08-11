@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>🧠 數獨識別與解題工具</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-image: url('/static/aurora.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      min-height: 100vh;
+      color: white;
+      font-family: Arial, sans-serif;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      z-index: 0;
+    }
+    .overlay {
+      position: relative;
+      z-index: 1;
+      padding: 20px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .images, .sudoku-grid {
+      flex-shrink: 0;
+      width: 362px;
+    }
+    .sudoku-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 40px);
+    }
+    .sudoku-cell {
+      width: 100%;
+      height: 40px;
+      box-sizing: border-box;
+      border: 1px solid rgb(199, 199, 199);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 18px;
+      color: #FBFBFF;
+    }
+    .sudoku-cell input {
+      width: 100%;
+      height: 100%;
+      text-align: center;
+      font-size: 18px;
+      font-weight: bold;
+      background: transparent;
+      color: white;
+      border: none;
+      outline: none;
+    }
+    .sudoku-grid .sudoku-cell:nth-child(3n) { border-right: 4px solid white; }
+    .sudoku-grid .sudoku-cell:nth-child(9n+1) { border-left: 4px solid white; }
+    .sudoku-grid .sudoku-cell:nth-child(-n+9) { border-top: 4px solid white; }
+    .sudoku-grid .sudoku-cell:nth-child(n+19):nth-child(-n+27),
+    .sudoku-grid .sudoku-cell:nth-child(n+46):nth-child(-n+54),
+    .sudoku-grid .sudoku-cell:nth-child(n+73):nth-child(-n+81) {
+      border-bottom: 4px solid white;
+    }
+    .images {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 40px);
+      gap: 2px;
+    }
+    .images img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border: 1px solid #888;
+    }
+    .controls {
+      margin-top: 20px;
+    }
+    .controls button {
+      padding: 10px 15px;
+      margin: 0 10px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+      border: 1px solid white;
+      background-color: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-weight: bold;
+    }
+    .controls button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    #progress-bar {
+      display: none;
+      margin-top: 20px;
+      text-align: center;
+    }
+    #progress-bar .bar {
+      display: inline-block;
+      width: 200px;
+      height: 10px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    #progress-bar .bar-inner {
+      width: 0%;
+      height: 100%;
+      background-color: white;
+      animation: progressMove 1.5s infinite;
+    }
+    @keyframes progressMove {
+      0% { width: 0%; }
+      50% { width: 100%; }
+      100% { width: 0%; }
+    }
+    @media (max-width: 768px) {
+      .images, .sudoku-grid {
+        width: 270px;
+      }
+      .sudoku-grid {
+        grid-template-columns: repeat(9, 1fr);
+        grid-template-rows: repeat(9, 30px);
+      }
+      .sudoku-cell {
+        height: 30px;
+      }
+      .sudoku-cell input {
+        font-size: 14px;
+      }
+      .images {
+        grid-template-rows: repeat(9, 30px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <h1>🧠 數獨識別與解題工具（圖片 → 裁切 + OCR + SAT）</h1>
+    <input type="file" id="upload" accept="image/*">
+    <div class="container">
+      <div class="images" id="cell-images"></div>
+      <div class="sudoku-grid" id="input-grid"></div>
+      <div class="sudoku-grid" id="output-grid"></div>
+    </div>
+    <div class="controls">
+      <button onclick="recognizeImage()">辨識圖片 (R)</button>
+      <button onclick="solveSudoku()">獲取答案 (Enter)</button>
+      <button onclick="clearAll()">清除格子 (Del)</button>
+    </div>
+    <div id="progress-bar">
+      <div class="bar"><div class="bar-inner"></div></div>
+      <div style="margin-top: 8px;">辨識中，請稍候...</div>
+    </div>
+  </div>
+  <script>
+    const cellImages = document.getElementById("cell-images");
+    const inputGrid = document.getElementById("input-grid");
+    const outputGrid = document.getElementById("output-grid");
+    const progressBar = document.getElementById("progress-bar");
+    const inputs = [];
+
+    for (let i = 0; i < 81; i++) {
+      const inpCell = document.createElement("div");
+      inpCell.className = "sudoku-cell";
+      const inp = document.createElement("input");
+      inp.maxLength = 1;
+      inp.oninput = () => inp.value = inp.value.replace(/[^1-9]/g, '');
+      inputs.push(inp);
+      inpCell.appendChild(inp);
+      inputGrid.appendChild(inpCell);
+
+      const outCell = document.createElement("div");
+      outCell.className = "sudoku-cell";
+      outputGrid.appendChild(outCell);
+
+      const img = document.createElement("img");
+      img.src = "";
+      cellImages.appendChild(img);
+    }
+
+    function clearAll() {
+      inputs.forEach(i => i.value = "");
+      Array.from(outputGrid.children).forEach(c => c.textContent = "");
+      Array.from(cellImages.children).forEach(c => c.src = "");
+      document.activeElement.blur(); // ✅ 清除焦點，避免干擾快捷鍵 R
+    }
+
+    function recognizeImage() {
+      document.activeElement.blur(); // ✅ 清除焦點，避免干擾快捷鍵 R
+      const file = document.getElementById("upload").files[0];
+      if (!file) return alert("請先選擇圖片！");
+      const formData = new FormData();
+      formData.append("image", file);
+      progressBar.style.display = "block";
+
+      fetch("/recognize", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        const digits = data.digits;
+        const cells = data.cells;
+        for (let i = 0; i < 81; i++) {
+          inputs[i].value = digits[i] === 0 ? "" : digits[i];
+          cellImages.children[i].src = cells[i];
+        }
+        inputs[0].focus();  // ✅ 辨識完成後自動聚焦第一格
+      })
+      .catch(err => alert("辨識失敗：" + err))
+      .finally(() => progressBar.style.display = "none");
+    }
+
+    function solveSudoku() {
+      const grid = inputs.map(i => parseInt(i.value) || 0);
+      fetch("/solve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ digits: grid })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const solution = data.solution;
+        const outCells = outputGrid.children;
+        for (let i = 0; i < 81; i++) {
+          outCells[i].textContent = solution[i] === 0 ? "" : solution[i];
+        }
+      })
+      .catch(err => alert("解題失敗：" + err));
+    }
+
+    // 鍵盤控制
+    document.addEventListener("keydown", (e) => {
+      const active = document.activeElement;
+      const isGridInput = inputs.includes(active);
+      const index = inputs.indexOf(active);
+
+      if (isGridInput) {
+        const row = Math.floor(index / 9);
+        const col = index % 9;
+        let newIndex = index;
+
+        switch (e.key) {
+          case "ArrowUp": if (row > 0) newIndex = (row - 1) * 9 + col; break;
+          case "ArrowDown": if (row < 8) newIndex = (row + 1) * 9 + col; break;
+          case "ArrowLeft": if (col > 0) newIndex = row * 9 + (col - 1); break;
+          case "ArrowRight": if (col < 8) newIndex = row * 9 + (col + 1); break;
+        }
+
+        if (newIndex !== index) {
+          inputs[newIndex].focus();
+          e.preventDefault();
+        }
+      }
+
+      if (e.key === "Enter") {
+        solveSudoku();
+        e.preventDefault();
+      }
+      if (e.key === "Delete") {
+        clearAll();
+        e.preventDefault();
+      }
+      if (e.key === "r" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        recognizeImage();
+        e.preventDefault();
+      }
+      if (e.key === "F2") {
+        document.activeElement.blur(); // ✅ 清除焦點，避免干擾快捷鍵 R
+        document.getElementById("upload").click();
+        e.preventDefault();
+      }
+    });
+  </script>
+</body>
+</html>
