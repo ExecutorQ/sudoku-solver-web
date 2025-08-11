@@ -1,6 +1,12 @@
 flask==2.3.3
-paddleocr==2.7.0.3
-opencv-python==4.8.1.78
-pillow==10.0.1
-python-sat==0.1.7.dev26
 werkzeug==2.3.7
+gunicorn==21.2.0
+
+paddleocr==2.7.0.3
+paddlepaddle==2.5.2
+
+opencv-python-headless==4.8.1.78
+pillow==10.0.1
+numpy==1.26.4
+
+python-sat==0.1.7.dev26
